@@ -1,0 +1,18 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: job-monitor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: job-monitor
+  template:
+    metadata:
+      labels:
+        name: job-monitor
+    spec:
+      containers:
+      - name: job-monitor
+        image: job-monitor:latest
+        imagePullPolicy: IfNotPresent

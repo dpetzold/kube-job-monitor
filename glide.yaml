@@ -1,0 +1,5 @@
+package: github.com/dpetzold/kube-job-monitor
+import:
+- package: github.com/Sirupsen/logrus
+- package: k8s.io/client-go
+  version: v7.0.0
