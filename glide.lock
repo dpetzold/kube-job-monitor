@@ -1,10 +1,16 @@
-hash: 4bde2b6dae7647f3253094a9476f95cfd5da0c390b3f45475e7920758b19ee30
-updated: 2018-04-24T11:34:30.245425671-07:00
+hash: d2253faabfa30632a5ec0819bb8a1a2a429ce50a85f36333cc34eda6077e4929
+updated: 2018-04-24T18:12:44.019102379-07:00
 imports:
+- name: github.com/certifi/gocertifi
+  version: deb3ae2ef2610fde3330947281941c562861188b
 - name: github.com/davecgh/go-spew
   version: 782f4967f2dc4564575ca782fe2d04090b5faca8
   subpackages:
   - spew
+- name: github.com/evalphobia/logrus_sentry
+  version: 57846a82817615f185b10cc40de8dc60c1ca5ae1
+- name: github.com/getsentry/raven-go
+  version: 0df589c7a903b6eb2b0df960a8719d64708476c0
 - name: github.com/ghodss/yaml
   version: 73d445a93680fa1a78ae23a5839bad48f32ba1ee
 - name: github.com/gogo/protobuf
@@ -36,6 +42,10 @@ imports:
   - simplelru
 - name: github.com/json-iterator/go
   version: 13f86432b882000a51c6e610c620974462691a97
+- name: github.com/pkg/errors
+  version: 816c9085562cd7ee03e7f8188a1cfd942858cded
+- name: github.com/sirupsen/logrus
+  version: 778f2e774c725116edbc3d039dc0dfc1cc62aae8
 - name: github.com/Sirupsen/logrus
   version: 778f2e774c725116edbc3d039dc0dfc1cc62aae8
 - name: github.com/spf13/pflag

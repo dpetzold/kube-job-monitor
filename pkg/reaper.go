@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	batch_v1 "k8s.io/api/batch/v1"
 	"k8s.io/api/core/v1"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
@@ -20,18 +20,21 @@ type JobReaper struct {
 	clientset       *kubernetes.Clientset
 	maxFailures     int
 	retentionPeriod time.Duration
+	sentry          *log.Logger
 }
 
 func NewJobReaper(
 	clientset *kubernetes.Clientset,
 	maxFailures int,
 	retentionPeriod time.Duration,
+	sentry *log.Logger,
 ) *JobReaper {
 
 	return &JobReaper{
 		clientset:       clientset,
 		maxFailures:     maxFailures,
 		retentionPeriod: retentionPeriod,
+		sentry:          sentry,
 	}
 }
 

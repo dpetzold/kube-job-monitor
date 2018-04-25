@@ -2,8 +2,10 @@ package main
 
 import (
 	"flag"
+	"os"
 
-	log "github.com/Sirupsen/logrus"
+	"github.com/evalphobia/logrus_sentry"
+	log "github.com/sirupsen/logrus"
 	batch_v1 "k8s.io/api/batch/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -35,13 +37,24 @@ func main() {
 		panic(err.Error())
 	}
 
-	// creates the clientset
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		panic(err.Error())
 	}
 
-	// Now let's start the controller
+	sentry := log.New()
+	hook, err := logrus_sentry.NewSentryHook(os.Getenv("SENTRY_DSN"), []log.Level{
+		log.PanicLevel,
+		log.FatalLevel,
+		log.ErrorLevel,
+	})
+
+	if err == nil {
+		sentry.Hooks.Add(hook)
+	} else {
+		log.WithError(err).Error("Error from sentry")
+	}
+
 	stopCh := make(chan struct{})
 	jobCh := make(chan *batch_v1.Job, 5)
 	reapCh := make(chan *batch_v1.Job, 5)
@@ -49,8 +62,8 @@ func main() {
 	defer close(jobCh)
 	defer close(reapCh)
 
-	reaper := NewJobReaper(clientset, *failures, *retentionPeriod)
-	processor := NewJobProcessor(clientset, reapCh)
+	reaper := NewJobReaper(clientset, *failures, *retentionPeriod, sentry)
+	processor := NewJobProcessor(clientset, reapCh, sentry)
 	controller := NewJobController(clientset, jobCh)
 
 	log.Infof("job-monitor running (%s)", GitCommit)

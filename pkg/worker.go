@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	batch_v1 "k8s.io/api/batch/v1"
 	api_v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
@@ -12,28 +12,32 @@ import (
 type JobProcessor struct {
 	clientset *kubernetes.Clientset
 	reaper    chan *batch_v1.Job
+	sentry    *log.Logger
 }
 
 func NewJobProcessor(
 	clientset *kubernetes.Clientset,
 	reaper chan *batch_v1.Job,
+	sentry *log.Logger,
 ) *JobProcessor {
+
 	return &JobProcessor{
 		clientset: clientset,
 		reaper:    reaper,
+		sentry:    sentry,
 	}
 }
 
 func (jp *JobProcessor) fail(job *batch_v1.Job, condition *batch_v1.JobCondition) {
 
-	log.WithFields(log.Fields{
+	jp.sentry.WithFields(log.Fields{
 		"Name":      job.ObjectMeta.GetLabels()["run"],
 		"Namespace": job.GetNamespace(),
 		"Status":    fmt.Sprintf("%v", condition.Type),
 		"Reason":    condition.Reason,
 		"Message":   condition.Message,
 		"Config":    job.GetAnnotations(),
-	}).Error(condition.Message)
+	}).Error(fmt.Sprintf("%s failed - %s", job.ObjectMeta.GetLabels()["run"], condition.Message)
 }
 
 func getJobCondition(job *batch_v1.Job) (*batch_v1.JobCondition, bool) {
