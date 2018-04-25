@@ -117,7 +117,7 @@ func (jc *JobController) processNextItem() bool {
 	if !exists {
 		log.WithFields(log.Fields{
 			"job": key,
-		}).Error("Job does not exist anymore")
+		}).Debug("Job does not exist anymore")
 		return false
 	}
 

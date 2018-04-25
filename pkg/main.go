@@ -43,7 +43,7 @@ func main() {
 	}
 
 	sentry := log.New()
-	hook, err := logrus_sentry.NewSentryHook(os.Getenv("SENTRY_DSN"), []log.Level{
+	hook, err := logrus_sentry.NewAsyncSentryHook(os.Getenv("SENTRY_DSN"), []log.Level{
 		log.PanicLevel,
 		log.FatalLevel,
 		log.ErrorLevel,

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -39,6 +40,33 @@ func podEvents(clientset *kubernetes.Clientset, pod api_v1.Pod) *api_v1.EventLis
 		FieldSelector: sel.String(),
 	})
 	return events
+}
+
+func podStatus(pod api_v1.Pod) string {
+	if pod.Status.Phase == api_v1.PodFailed {
+		return fmt.Sprintf("%s - %s", pod.Status.Reason, pod.Status.Message)
+	}
+	return ""
+}
+
+func getJobCondition(job *batch_v1.Job) (*batch_v1.JobCondition, bool) {
+	for _, c := range job.Status.Conditions {
+		if (c.Type == batch_v1.JobComplete || c.Type == batch_v1.JobFailed) && c.Status == api_v1.ConditionTrue {
+			return &c, true
+		}
+	}
+	return nil, false
+}
+
+func failedPods(pods *api_v1.PodList) []api_v1.Pod {
+
+	var failed []api_v1.Pod
+	for _, pod := range pods.Items {
+		if pod.Status.Phase == api_v1.PodFailed {
+			failed = append(failed, pod)
+		}
+	}
+	return failed
 }
 
 func oldestPod(pods *api_v1.PodList) api_v1.Pod {

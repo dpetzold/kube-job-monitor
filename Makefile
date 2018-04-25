@@ -4,7 +4,7 @@ GIT_COMMIT = $(shell git rev-parse HEAD)
 GO_SOURCE_FILES = $(shell find pkg -type f -name "*.go")
 
 build: vendor $(GO_SOURCE_FILES)
-	go build -a -ldflags "-X main.GitCommit=${GIT_COMMIT} -extldflags '-static'" -o build/job-monitor ./pkg
+	go build -v -i -ldflags "-X main.GitCommit=${GIT_COMMIT} -extldflags '-static'" -o build/job-monitor ./pkg
 
 vendor:
 	glide install
