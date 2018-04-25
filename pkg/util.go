@@ -42,6 +42,7 @@ func podEvents(clientset *kubernetes.Clientset, pod api_v1.Pod) *api_v1.EventLis
 }
 
 func oldestPod(pods *api_v1.PodList) api_v1.Pod {
+
 	time := time.Now()
 	var pod api_v1.Pod
 	for _, p := range pods.Items {

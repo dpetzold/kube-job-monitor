@@ -6,13 +6,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	batch_v1 "k8s.io/api/batch/v1"
-	"k8s.io/api/core/v1"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
-	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/selection"
-	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -71,8 +65,7 @@ func (jr *JobReaper) reap(job *batch_v1.Job) {
 		"Config":    job.GetAnnotations(),
 	})
 
-	pods, err := jr.jobPods(job)
-
+	pods, err := jobPods(jr.clientset, job)
 	if err != nil {
 		if _, ok := err.(*apiErrors.StatusError); ok {
 			log.WithError(err).Warnf("Could not fetch jobPods. Skipping for now")
@@ -80,7 +73,7 @@ func (jr *JobReaper) reap(job *batch_v1.Job) {
 		}
 		log.Panic(err.Error())
 	}
-	pod := jr.oldestPod(pods)
+	pod := oldestPod(pods)
 
 	if scheduledJobName, ok := pod.GetLabels()["run"]; ok {
 		alert.WithFields(log.Fields{
@@ -108,7 +101,7 @@ func (jr *JobReaper) reap(job *batch_v1.Job) {
 				"job":        job,
 				"conditions": job.Status.Conditions,
 				"pod":        pod,
-				"events":     jr.podEvents(pod),
+				"events":     podEvents(jr.clientset, pod),
 			}).Error("Unexpected null for container state")
 			return
 		}
@@ -155,7 +148,9 @@ func (jr *JobReaper) reap(job *batch_v1.Job) {
 		for _, pod := range pods.Items {
 			err := jr.clientset.Core().Pods(alert.Data["Namespace"].(string)).Delete(pod.GetName(), nil)
 			if err != nil {
-				log.Error(err.Error())
+				log.WithFields(log.Fields{
+					"pod": pod.GetName(),
+				}).WithError(err).Error("Deleteing pod")
 			}
 		}
 
@@ -164,52 +159,6 @@ func (jr *JobReaper) reap(job *batch_v1.Job) {
 			"count": numPods,
 		}).Info("Deleted pods")
 	}()
-}
-
-func (jr *JobReaper) jobPods(job *batch_v1.Job) (*v1.PodList, error) {
-	controllerUID := job.Spec.Selector.MatchLabels["controller-uid"]
-	selector := labels.NewSelector()
-	requirement, err := labels.NewRequirement("controller-uid", selection.Equals, sets.NewString(controllerUID).List())
-	if err != nil {
-		log.WithError(err).Error("Creating requirements")
-	}
-	selector = selector.Add(*requirement)
-	pods, err := jr.clientset.Core().Pods(job.ObjectMeta.Namespace).List(meta_v1.ListOptions{LabelSelector: selector.String()})
-	if err != nil {
-		log.WithError(err).Error("Listing pods")
-	}
-
-	return pods, err
-}
-
-func (jr *JobReaper) podEvents(pod v1.Pod) *v1.EventList {
-	sel, err := fields.ParseSelector("involvedObject.name=" + pod.ObjectMeta.Name)
-	if err != nil {
-		log.WithError(err).Panic("ParseSelector")
-	}
-	events, err := jr.clientset.Core().Events(pod.ObjectMeta.Namespace).List(meta_v1.ListOptions{
-		FieldSelector: sel.String(),
-	})
-	return events
-}
-
-func (jr *JobReaper) oldestPod(pods *v1.PodList) v1.Pod {
-	time := time.Now()
-	var tempPod v1.Pod
-	for _, pod := range pods.Items {
-		if time.After(pod.ObjectMeta.CreationTimestamp.Time) {
-			time = pod.ObjectMeta.CreationTimestamp.Time
-			tempPod = pod
-		}
-	}
-	return tempPod
-}
-
-func getJobCompletions(job batch_v1.Job) int {
-	if job.Spec.Completions != nil {
-		return int(*job.Spec.Completions)
-	}
-	return 1
 }
 
 func (jr *JobReaper) Run(jobs chan *batch_v1.Job) {

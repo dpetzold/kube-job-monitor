@@ -30,14 +30,16 @@ func NewJobProcessor(
 
 func (jp *JobProcessor) fail(job *batch_v1.Job, condition *batch_v1.JobCondition) {
 
+	jobName := job.ObjectMeta.GetLabels()["run"]
+
 	jp.sentry.WithFields(log.Fields{
-		"Name":      job.ObjectMeta.GetLabels()["run"],
+		"Name":      jobName,
 		"Namespace": job.GetNamespace(),
 		"Status":    fmt.Sprintf("%v", condition.Type),
 		"Reason":    condition.Reason,
 		"Message":   condition.Message,
 		"Config":    job.GetAnnotations(),
-	}).Error(fmt.Sprintf("%s failed - %s", job.ObjectMeta.GetLabels()["run"], condition.Message)
+	}).Error("%s failed - %s", jobName, condition.Message)
 }
 
 func getJobCondition(job *batch_v1.Job) (*batch_v1.JobCondition, bool) {
