@@ -171,7 +171,9 @@ func (jr *JobReaper) Run(jobs chan *batch_v1.Job) {
 			break
 		}
 
-		jr.reap(job)
+		if shouldReap(job) {
+			jr.reap(job)
+		}
 	}
 
 	close(jobs)
