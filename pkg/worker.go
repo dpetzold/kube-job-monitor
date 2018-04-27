@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -51,14 +52,33 @@ func (jp *JobProcessor) fail(job *batch_v1.Job, condition *batch_v1.JobCondition
 		}
 	}
 
-	jp.sentry.WithFields(log.Fields{
+	var terminationState *api_v1.ContainerStateTerminated
+	for _, c := range pod.Status.ContainerStatuses {
+		if c.State.Terminated != nil {
+			terminationState = c.State.Terminated
+		}
+	}
+
+	alert := jp.sentry.WithFields(log.Fields{
 		"Name":      jobName,
+		"Pod":       pod.GetName(),
 		"Namespace": job.GetNamespace(),
 		"Reason":    condition.Reason,
 		"Message":   condition.Message,
 		"Config":    job.GetAnnotations(),
 		"Events":    strings.Join(warnings[:], "\n"),
-	}).Errorf("%s failed - %s", jobName, condition.Message)
+	})
+
+	if terminationState != nil {
+		alert = alert.WithFields(log.Fields{
+			"ExitCode":    strconv.FormatInt(int64(terminationState.ExitCode), 10),
+			"ExitReason":  terminationState.Reason,
+			"ExitMessage": terminationState.Message,
+			"ExitSignal":  strconv.FormatInt(int64(terminationState.Signal), 10),
+		})
+	}
+
+	alert.Errorf("%s failed - %s", jobName, condition.Message)
 }
 
 func (jp *JobProcessor) processJob(job *batch_v1.Job) error {

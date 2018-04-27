@@ -82,7 +82,7 @@ func oldestPod(pods *api_v1.PodList) api_v1.Pod {
 	return pod
 }
 
-func getJobCompletions(job batch_v1.Job) int {
+func getJobCompletions(job *batch_v1.Job) int {
 	if job.Spec.Completions != nil {
 		return int(*job.Spec.Completions)
 	}

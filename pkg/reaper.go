@@ -32,7 +32,7 @@ func NewJobReaper(
 	}
 }
 
-func (jr *JobReaper) shouldReap(job batch_v1.Job) bool {
+func (jr *JobReaper) shouldReap(job *batch_v1.Job) bool {
 
 	// Ignore cronjobs
 	if len(job.ObjectMeta.OwnerReferences) > 0 {
@@ -96,12 +96,12 @@ func (jr *JobReaper) reap(job *batch_v1.Job) {
 			})
 		} else {
 			log.WithFields(log.Fields{
-				"statuses":   pod.Status.ContainerStatuses[0],
-				"terminated": terminated,
-				"job":        job,
-				"conditions": job.Status.Conditions,
-				"pod":        pod,
-				"events":     podEvents(jr.clientset, pod),
+				"Statuses":   pod.Status.ContainerStatuses[0],
+				"Terminated": terminated,
+				"Job":        job,
+				"Conditions": job.Status.Conditions,
+				"Pod":        pod,
+				"Events":     podEvents(jr.clientset, pod),
 			}).Error("Unexpected null for container state")
 			return
 		}
@@ -171,7 +171,7 @@ func (jr *JobReaper) Run(jobs chan *batch_v1.Job) {
 			break
 		}
 
-		if shouldReap(job) {
+		if jr.shouldReap(job) {
 			jr.reap(job)
 		}
 	}
