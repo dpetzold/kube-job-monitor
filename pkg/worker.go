@@ -8,7 +8,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	batch_v1 "k8s.io/api/batch/v1"
 	api_v1 "k8s.io/api/core/v1"
-	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -35,29 +34,32 @@ func (jp *JobProcessor) fail(job *batch_v1.Job, condition *batch_v1.JobCondition
 
 	jobName := job.ObjectMeta.GetLabels()["run"]
 
-	pods, err := jobPods(jp.clientset, job)
-	if err != nil {
-		if _, ok := err.(*apiErrors.StatusError); ok {
-			log.WithError(err).Warnf("Could not fetch jobPods. Skipping for now")
-			return
+	pod := func(clientset *kubernetes.Clientset, job *batch_v1.Job) api_v1.Pod {
+		pods, err := jobPods(clientset, job)
+		if err != nil {
+			jp.sentry.WithField("job", jobName).WithError(err).Panic("Could not fetch jobPods")
 		}
-		log.Panic(err.Error())
-	}
-	pod := oldestPod(pods)
+		return oldestPod(pods)
+	}(jp.clientset, job)
 
-	var warnings []string
-	for _, e := range podEvents(jp.clientset, pod).Items {
-		if e.Type == api_v1.EventTypeWarning {
-			warnings = append(warnings, fmt.Sprintf("%s - %s", e.Reason, e.Message))
+	warningEvents := func(clientset *kubernetes.Clientset, pod api_v1.Pod) string {
+		var warnings []string
+		for _, e := range podEvents(clientset, pod).Items {
+			if e.Type == api_v1.EventTypeWarning {
+				warnings = append(warnings, fmt.Sprintf("%s - %s", e.Reason, e.Message))
+			}
 		}
-	}
+		return strings.Join(warnings[:], "\n")
+	}(jp.clientset, pod)
 
-	var terminationState *api_v1.ContainerStateTerminated
-	for _, c := range pod.Status.ContainerStatuses {
-		if c.State.Terminated != nil {
-			terminationState = c.State.Terminated
+	terminationState := func(pod api_v1.Pod) *api_v1.ContainerStateTerminated {
+		for _, c := range pod.Status.ContainerStatuses {
+			if c.State.Terminated != nil {
+				return c.State.Terminated
+			}
 		}
-	}
+		return nil
+	}(pod)
 
 	alert := jp.sentry.WithFields(log.Fields{
 		"Name":      jobName,
@@ -66,7 +68,7 @@ func (jp *JobProcessor) fail(job *batch_v1.Job, condition *batch_v1.JobCondition
 		"Reason":    condition.Reason,
 		"Message":   condition.Message,
 		"Config":    job.GetAnnotations(),
-		"Events":    strings.Join(warnings[:], "\n"),
+		"Events":    warningEvents,
 	})
 
 	if terminationState != nil {

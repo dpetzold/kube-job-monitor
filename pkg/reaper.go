@@ -85,7 +85,7 @@ func (jr *JobReaper) reap(job *batch_v1.Job) {
 		alert.WithField("Status", string(pod.Status.Phase))
 	}
 
-	if len(pod.Status.ContainerStatuses) > 0 { //Container has exited
+	if len(pod.Status.ContainerStatuses) > 0 { // Container has exited
 		terminated := pod.Status.ContainerStatuses[0].State.Terminated
 		if terminated != nil {
 			alert.WithFields(log.Fields{
@@ -105,7 +105,8 @@ func (jr *JobReaper) reap(job *batch_v1.Job) {
 			}).Error("Unexpected null for container state")
 			return
 		}
-	} else if len(job.Status.Conditions) > 0 { //TODO naive when more than one condition
+	} else if len(job.Status.Conditions) > 0 {
+		// TODO: naive when more than one condition
 		condition := job.Status.Conditions[0]
 		alert.Message = fmt.Sprintf("Pod Missing: %s - %s", condition.Reason, condition.Message)
 		if condition.Type == batch_v1.JobComplete {
