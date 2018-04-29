@@ -1,13 +1,11 @@
 package main
 
 import (
-	"fmt"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 	batch_v1 "k8s.io/api/batch/v1"
 	api_v1 "k8s.io/api/core/v1"
-	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -35,108 +33,55 @@ func NewJobReaper(
 
 func (jr *JobReaper) shouldReap(job *batch_v1.Job) bool {
 
+	logger := log.WithFields(log.Fields{
+		"job": job.GetName(),
+	})
+
 	// Ignore cronjobs
 	if len(job.ObjectMeta.OwnerReferences) > 0 {
+		logger.Info("Ignoring job with owner cound > 0")
 		return false
 	}
 
 	// Always reap if number of failures has exceed maximum
 	if jr.maxFailures >= 0 && int(job.Status.Failed) > jr.maxFailures {
+		logger.Info("Reaping job max failures exceeded")
 		return true
 	}
 
 	// Don't reap anything that hasn't met its completion count
 	if int(job.Status.Succeeded) < getJobCompletions(job) {
+		logger.Info("Ignoring job completion count not met")
 		return false
 	}
 
 	// Don't reap completed jobs that aren't old enough
 	if job.Status.CompletionTime != nil &&
 		time.Since(job.Status.CompletionTime.Time) < jr.retentionPeriod {
+		logger.Info("Ignoring job within retention period")
 		return false
 	}
 
+	logger.Info("Job met reap criteria")
 	return true
 }
 
 func (jr *JobReaper) reap(job *batch_v1.Job) {
-	alert := log.WithFields(log.Fields{
+	fields := log.Fields{
 		"Name":      job.GetName(),
 		"Namespace": job.GetNamespace(),
 		"Config":    job.GetAnnotations(),
-	})
+	}
 
 	pods, err := jobPods(jr.clientset, job)
 	if err != nil {
-		if _, ok := err.(*apiErrors.StatusError); ok {
-			log.WithError(err).Warnf("Could not fetch jobPods. Skipping for now")
-			return
-		}
-		log.Panic(err.Error())
-	}
-	pod := oldestPod(pods)
-
-	if scheduledJobName, ok := pod.GetLabels()["run"]; ok {
-		alert.WithFields(log.Fields{
-			"Name": scheduledJobName,
-		})
+		jr.sentry.WithFields(fields).WithError(err).Panic("Could not fetch job pods")
 	}
 
-	if pod.Status.Phase != "" {
-		alert.WithField("Status", string(pod.Status.Phase))
+	if jr.shouldReap(job) {
+		jr.deletePods(job, pods)
+		log.WithFields(fields).Info("Job reaped")
 	}
-
-	if len(pod.Status.ContainerStatuses) > 0 { // Container has exited
-		terminated := pod.Status.ContainerStatuses[0].State.Terminated
-		if terminated != nil {
-			alert.WithFields(log.Fields{
-				"Message":   terminated.Reason, // ERRRRR
-				"ExitCode":  int(terminated.ExitCode),
-				"StartTime": terminated.StartedAt.Time,
-				"EndTime":   terminated.FinishedAt.Time,
-			})
-		} else {
-			log.WithFields(log.Fields{
-				"Statuses":   pod.Status.ContainerStatuses[0],
-				"Terminated": terminated,
-				"Job":        job,
-				"Conditions": job.Status.Conditions,
-				"Pod":        pod,
-				"Events":     podEvents(jr.clientset, pod),
-			}).Error("Unexpected null for container state")
-			return
-		}
-	} else if len(job.Status.Conditions) > 0 {
-		// TODO: naive when more than one condition
-		condition := job.Status.Conditions[0]
-		alert.Message = fmt.Sprintf("Pod Missing: %s - %s", condition.Reason, condition.Message)
-		if condition.Type == batch_v1.JobComplete {
-			alert.WithFields(log.Fields{
-				"ExitCode": 0,
-				"Status":   "Succeeded",
-			})
-		} else {
-			alert.WithFields(log.Fields{
-				"ExitCode": 998,
-			})
-		}
-
-		alert.WithFields(log.Fields{
-			"StartTime": job.Status.StartTime.Time,
-			"EndTime":   condition.LastTransitionTime.Time,
-		})
-
-	} else {
-		// Unfinished Containers or missing
-		alert.WithFields(log.Fields{
-			"ExitCode": 999,
-			"EndTime":  time.Now(),
-		})
-	}
-
-	jr.deletePods(job, pods)
-
-	alert.Info("Job reaped")
 }
 
 func (jr *JobReaper) deletePods(job *batch_v1.Job, pods *api_v1.PodList) {
@@ -176,9 +121,7 @@ func (jr *JobReaper) Run(jobs chan *batch_v1.Job) {
 			break
 		}
 
-		if jr.shouldReap(job) {
-			jr.reap(job)
-		}
+		jr.reap(job)
 	}
 
 	close(jobs)

@@ -37,7 +37,7 @@ func (jp *JobProcessor) fail(job *batch_v1.Job, condition *batch_v1.JobCondition
 	pod := func(clientset *kubernetes.Clientset, job *batch_v1.Job) api_v1.Pod {
 		pods, err := jobPods(clientset, job)
 		if err != nil {
-			jp.sentry.WithField("job", jobName).WithError(err).Panic("Could not fetch jobPods")
+			jp.sentry.WithField("job", jobName).WithError(err).Panic("Could not fetch job pods")
 		}
 		return oldestPod(pods)
 	}(jp.clientset, job)
