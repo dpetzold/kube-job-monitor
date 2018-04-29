@@ -6,6 +6,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	batch_v1 "k8s.io/api/batch/v1"
+	api_v1 "k8s.io/api/core/v1"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/kubernetes"
 )
@@ -133,33 +134,36 @@ func (jr *JobReaper) reap(job *batch_v1.Job) {
 		})
 	}
 
+	jr.deletePods(job, pods)
+
 	alert.Info("Job reaped")
+}
 
-	go func() {
-		err := jr.clientset.Batch().Jobs(alert.Data["Namespace"].(string)).Delete(job.GetName(), nil)
+func (jr *JobReaper) deletePods(job *batch_v1.Job, pods *api_v1.PodList) {
+
+	err := jr.clientset.Batch().Jobs(job.GetNamespace()).Delete(job.GetName(), nil)
+	if err != nil {
+		log.Error(err.Error())
+	}
+
+	log.WithFields(log.Fields{
+		"job": job.GetName(),
+	}).Debug("Deleting pods")
+
+	numPods := len(pods.Items)
+	for _, pod := range pods.Items {
+		err := jr.clientset.Core().Pods(job.GetNamespace()).Delete(pod.GetName(), nil)
 		if err != nil {
-			log.Error(err.Error())
+			log.WithFields(log.Fields{
+				"pod": pod.GetName(),
+			}).WithError(err).Error("Deleteing pod")
 		}
+	}
 
-		log.WithFields(log.Fields{
-			"pod": alert.Data["Name"].(string),
-		}).Debug("Deleting pods")
-
-		numPods := len(pods.Items)
-		for _, pod := range pods.Items {
-			err := jr.clientset.Core().Pods(alert.Data["Namespace"].(string)).Delete(pod.GetName(), nil)
-			if err != nil {
-				log.WithFields(log.Fields{
-					"pod": pod.GetName(),
-				}).WithError(err).Error("Deleteing pod")
-			}
-		}
-
-		log.WithFields(log.Fields{
-			"pod":   alert.Data["Name"].(string),
-			"count": numPods,
-		}).Info("Deleted pods")
-	}()
+	log.WithFields(log.Fields{
+		"job":   job.GetName(),
+		"count": numPods,
+	}).Info("Deleted pods")
 }
 
 func (jr *JobReaper) Run(jobs chan *batch_v1.Job) {
